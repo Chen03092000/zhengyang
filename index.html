@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寻找郑洋</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            position: absolute;
+            top: 10px;
+            text-align: center;
+            width: 100%;
+            color: black;
+            font-size: 24px;
+        }
+
+        img {
+            display: none;
+            position: absolute;
+            width: 150px;
+        }
+
+        /* 自定义弹窗样式 */
+        #modal {
+            display: none;
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        #modal button {
+            margin-top: 20px;
+        }
+
+        #overlay {
+            display: none;
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <h1>寻找郑洋</h1>
+    <img id="zhengyang" src="zhengyang.jpg" alt="郑洋">
+    <audio id="laugh" src="laugh.mp3" loop></audio>
+
+    <!-- 自定义弹窗 -->
+    <div id="overlay"></div>
+    <div id="modal">
+        <p id="modal-text"></p>
+        <button id="modal-button">确定</button>
+    </div>
+
+    <script>
+        // 记录游戏状态
+        let found = false;
+        let startTime = Date.now();
+        let clickCount = 0;
+        let targetPosition = { x: 0, y: 0 };  // 存储照片的实际位置
+        const maxVolumeMultiplier = 3; // 最大音量乘数，增加音量动态范围
+        let clickPlayback = false; // 标记是否点击后播放
+
+        // 获取页面元素
+        const img = document.getElementById('zhengyang');
+        const laugh = document.getElementById('laugh');
+        const modal = document.getElementById('modal');
+        const modalText = document.getElementById('modal-text');
+        const modalButton = document.getElementById('modal-button');
+        const overlay = document.getElementById('overlay');
+
+        // 随机生成郑洋的照片位置，游戏过程中固定
+        function randomizePosition() {
+            const x = Math.random() * (window.innerWidth - 150); // 照片宽度150px
+            const y = Math.random() * (window.innerHeight - 150);
+            img.style.left = `${x}px`;
+            img.style.top = `${y}px`;
+
+            // 存储照片的实际中心点位置
+            targetPosition.x = x + 75;  // 75是照片的宽度/2，获取中心点
+            targetPosition.y = y + 75;  // 75是照片的高度/2，获取中心点
+        }
+
+        // 计算距离，返回接近度百分比
+        function calculateProximity(clickX, clickY) {
+            const dx = clickX - targetPosition.x;
+            const dy = clickY - targetPosition.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // 最大可能的距离是窗口对角线的长度
+            const maxDistance = Math.sqrt(window.innerWidth * window.innerWidth + window.innerHeight * window.innerHeight);
+
+            // 接近度百分比
+            const proximity = Math.max(0, Math.min(100, 100 - (distance / maxDistance * 100)));
+            return proximity.toFixed(1); // 保留1位小数
+        }
+
+        // 根据接近度计算音量
+        function calculateVolume(proximity) {
+            let volume = (proximity / 100) ** 2; // 使用平方函数放大音量变化，让接近时音量更大
+            return Math.min(volume * maxVolumeMultiplier, 1); // 限制最大音量为1，放大动态范围
+        }
+
+        // 鼠标移动时检查距离并调整音量
+        document.body.addEventListener('mousemove', function (event) {
+            if (found || clickPlayback) return; // 如果点击后播放或找到目标则忽略移动
+
+            const proximity = calculateProximity(event.clientX, event.clientY);
+            laugh.volume = calculateVolume(proximity); // 根据接近度动态调整音量
+
+            if (laugh.volume > 0 && laugh.paused) {
+                laugh.play();  // 播放音频
+            } else if (laugh.volume === 0 && !laugh.paused) {
+                laugh.pause(); // 停止音频播放当用户远离时
+            }
+        });
+
+        // 鼠标点击时重新播放音频，并调整音量
+        document.body.addEventListener('click', function (event) {
+            if (found) return;
+
+            clickCount++;
+            const proximity = calculateProximity(event.clientX, event.clientY);
+
+            // 重新播放音频并根据距离调整音量
+            clickPlayback = true; // 标记为点击播放
+            laugh.currentTime = 0; // 重置播放进度
+            laugh.volume = calculateVolume(proximity); // 调整点击时的音量
+            laugh.play(); // 重新播放音频
+            laugh.onended = function() {
+                clickPlayback = false; // 音频播放结束后恢复鼠标移动控制
+            };
+
+            // 如果接近度在95%到100%之间，则显示照片并恭喜信息
+            if (proximity >= 95) {
+                found = true;
+                img.style.display = 'block';
+
+                // 显示点击次数和时间
+                const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+                modalText.textContent = `恭喜你找到了郑洋！你用了 ${clickCount} 次点击，花费了 ${timeTaken} 秒。`;
+                
+                // 显示弹窗
+                modal.style.display = 'block';
+                overlay.style.display = 'block';
+
+                // 停止笑声
+                laugh.pause();
+            }
+        });
+
+        // 初始化游戏
+        function initGame() {
+            found = false;
+            clickCount = 0;
+            clickPlayback = false; // 重置点击播放标记
+            startTime = Date.now();
+            img.style.display = 'none';
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
+            randomizePosition();  // 初始化时随机生成照片位置
+        }
+
+        // 页面加载时初始化游戏
+        window.onload = initGame;
+
+        // 确定按钮点击，重新开始游戏
+        modalButton.addEventListener('click', function () {
+            initGame();
+        });
+    </script>
+</body>
+</html>
